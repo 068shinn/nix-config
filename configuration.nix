@@ -125,6 +125,7 @@
     mangohud
     pfetch
     prismlauncher
+    spotify
     temurin-bin-17 #java17
     vscode
   ];
