@@ -118,17 +118,21 @@
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
+    brave
     gnome-tweaks
     fastfetch
     git
     htop
     mangohud
+    obsidian
     pfetch
     prismlauncher
     spotify
     temurin-bin-17 #java17
     vscode
   ];
+
+  services.udev.packages = [ pkgs.via ];
 
   programs.firefox.enable = true;
   programs.gamemode.enable = true;
