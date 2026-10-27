@@ -1,191 +1,238 @@
-# Edit this configuration file to define what should be installed on
-# your system.  Help is available in the configuration.nix(5) man page
-# and in the NixOS manual (accessible by running ‘nixos-help’).
-
 { config, pkgs, inputs, ... }:
 
-{
-  imports =
-    [ # Include the results of the hardware scan.
-      ./hardware-configuration.nix
-    ];
 
-  # Bootloader.
+let
+setRes = pkgs.writeShellScript "sunshine-set-res" ''
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
+    
+    # Grab the physical monitor connector ID cleanly (e.g. DP-2)
+    MONITOR=$(${pkgs.gnome-randr}/bin/gnome-randr | ${pkgs.gnugrep}/bin/grep -E "^(DP|HDMI|eDP)-[0-9]" | head -n 1 | ${pkgs.gawk}/bin/awk '{print $1}')
+    
+    # Fallback if detection returns empty
+    if [ -z "$MONITOR" ]; then
+      MONITOR="DP-2"
+    fi
+
+    echo "[$(date)] Setting resolution on $MONITOR to 1280x800" >> /run/user/1000/sunshine.log
+    
+    # Execute gnome-randr and capture actual exit code
+    ${pkgs.gnome-randr}/bin/gnome-randr modify "$MONITOR" --mode 1280x800@59.910 >> /run/user/1000/sunshine.log 2>&1
+    ERR=$?
+    
+    if [ $ERR -eq 0 ]; then
+      echo "[$(date)] Resolution change succeeded" >> /run/user/1000/sunshine.log
+    else
+      echo "[$(date)] Resolution change FAILED (exit code $ERR)" >> /run/user/1000/sunshine.log
+      exit 1
+    fi
+    sleep 2
+  '';
+
+  restoreRes = pkgs.writeShellScript "sunshine-restore-res" ''
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus"
+    
+    MONITOR=$(${pkgs.gnome-randr}/bin/gnome-randr | ${pkgs.gnugrep}/bin/grep -E "^(DP|HDMI|eDP)-[0-9]" | head -n 1 | ${pkgs.gawk}/bin/awk '{print $1}')
+    if [ -z "$MONITOR" ]; then
+      MONITOR="DP-2"
+    fi
+
+    echo "[$(date)] Killing steam" >> /run/user/1000/sunshine.log
+    pkill -9 steam 2>/dev/null || true
+    echo "[$(date)] Restoring resolution on $MONITOR to 3440x1440" >> /run/user/1000/sunshine.log
+    ${pkgs.gnome-randr}/bin/gnome-randr modify "$MONITOR" --mode 3440x1440@59.973 >> /run/user/1000/sunshine.log 2>&1
+    echo "[$(date)] Session ended" >> /run/user/1000/sunshine.log
+  '';
+
+  startSteam = pkgs.writeShellScript "sunshine-start-steam" ''
+    echo "[$(date)] Starting Steam session (DISPLAY=$DISPLAY WAYLAND_DISPLAY=$WAYLAND_DISPLAY)" >> /run/user/1000/sunshine.log
+
+    pkill -9 steam 2>/dev/null || true
+    sleep 1
+
+    systemd-run --user --collect \
+      --property=StandardOutput=append:/run/user/1000/sunshine.log \
+      --property=StandardError=append:/run/user/1000/sunshine.log \
+      --setenv=WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+      --setenv=DISPLAY="$DISPLAY" \
+      --setenv=XDG_RUNTIME_DIR="/run/user/1000" \
+      --setenv=DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/1000/bus" \
+      /run/current-system/sw/bin/steam -gamepadui
+
+    sleep 15
+
+    echo "[$(date)] Steam launched, watching process" >> /run/user/1000/sunshine.log
+    while ${pkgs.procps}/bin/pgrep -i steam > /dev/null; do
+      sleep 3
+    done
+    echo "[$(date)] Steam exited, ending session" >> /run/user/1000/sunshine.log
+  '';
+in
+
+{
+  imports = [
+    ./hardware-configuration.nix
+  ];
+
+  # ── Boot ────────────────────────────────────────────────────────────────────
   boot.loader.systemd-boot.enable = true;
   boot.loader.systemd-boot.consoleMode = "auto";
   boot.loader.efi.canTouchEfiVariables = true;
-
-  # Use latest kernel.
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
-  nix.settings.experimental-features = [ "nix-command" "flakes"];
+  # ── Nix ─────────────────────────────────────────────────────────────────────
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
-  networking.hostName = "alakazam"; # Define your hostname.
+  # ── Networking ──────────────────────────────────────────────────────────────
+  networking.hostName = "alakazam";
   networking.networkmanager.enable = true;
   networking.firewall.allowedTCPPorts = [ 25565 ];
-  # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
 
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
-
-  # Set your time zone.
+  # ── Locale & Time ───────────────────────────────────────────────────────────
   time.timeZone = "America/Chicago";
-
-  # Select internationalisation properties.
   i18n.defaultLocale = "en_US.UTF-8";
-  i18n.extraLocaleSettings = {
-    LC_ADDRESS = "en_US.UTF-8";
-    LC_IDENTIFICATION = "en_US.UTF-8";
-    LC_MEASUREMENT = "en_US.UTF-8";
-    LC_MONETARY = "en_US.UTF-8";
-    LC_NAME = "en_US.UTF-8";
-    LC_NUMERIC = "en_US.UTF-8";
-    LC_PAPER = "en_US.UTF-8";
-    LC_TELEPHONE = "en_US.UTF-8";
-    LC_TIME = "en_US.UTF-8";
-  };
 
-  # Secondary 2TB NVMe Drive for Games
+  # ── Filesystems ─────────────────────────────────────────────────────────────
   fileSystems."/mnt/games" = {
-    device = "/dev/disk/by-uuid/cd5ffefb-e962-4951-810b-5ce2c0adef45";
-    fsType = "ext4";
+    device  = "/dev/disk/by-uuid/cd5ffefb-e962-4951-810b-5ce2c0adef45";
+    fsType  = "ext4";
     options = [ "defaults" "nofail" "noatime" "x-gvfs-show" ];
   };
-
-  # Enable trim for SSDs
   services.fstrim.enable = true;
 
-  # Graphics and Windowing System
+  # ── Display & Desktop ───────────────────────────────────────────────────────
   services.xserver = {
     enable = true;
-    xkb = {
-      layout = "us";
-      variant = "";
-    };
-    
-    # Enable IceWM
-    windowManager.icewm.enable = true;
+    xkb.layout = "us";
+  };
+  services.displayManager.gdm.enable = true;
+  services.desktopManager.gnome.enable = true;
+  services.displayManager.autoLogin.enable = true;
+  services.displayManager.autoLogin.user = "dustin";
 
-    # Enable GNOME & GDM
-    displayManager.gdm.enable = true;
-    desktopManager.gnome.enable = true;
+  # ── Printing ─────────────────────────────────────────────────────────────────
+  services.printing = {
+    enable  = true;
+    drivers = [ pkgs.hplipWithPlugin ];
+  };
+  services.avahi = {
+    enable       = true;
+    nssmdns4     = true;
+    openFirewall = true;
   };
 
-  # Enable CUPS to print documents.
-  services.printing.enable = true;
-
-  # Enable sound with pipewire.
-  hardware.pulseaudio.enable = false;
-  security.rtkit.enable = true;
+  # ── Audio ────────────────────────────────────────────────────────────────────
+  services.pulseaudio.enable = false;
+  security.rtkit.enable      = true;
   services.pipewire = {
-    enable = true;
-    alsa.enable = true;
+    enable            = true;
+    alsa.enable       = true;
     alsa.support32Bit = true;
-    pulse.enable = true;
-    # If you want to use JACK applications, uncomment this
-    #jack.enable = true;
-
-    # use the example session manager (no others are packaged yet so this is enabled by default,
-    # no need to redefine it in your config for now)
-    #media-session.enable = true;
+    pulse.enable      = true;
   };
 
-  # Enable touchpad support (enabled default in most desktopManager).
-  # services.xserver.libinput.enable = true;
-
-  # Define a user account. Don't forget to set a password with ‘passwd’.
-  users.users.dustin = {
-    isNormalUser = true;
-    description = "Dustin Shinn";
-    extraGroups = [ "networkmanager" "wheel" ];
-    shell = pkgs.zsh;
-    packages = with pkgs; [
-    #  thunderbird
-    ];
-  };
-
-  # Allow unfree packages
-  nixpkgs.config.allowUnfree = true;
-
+  # ── Hardware ─────────────────────────────────────────────────────────────────
   hardware.graphics = {
-    enable = true;
+    enable      = true;
     enable32Bit = true;
   };
-
   hardware.steam-hardware.enable = true;
+  hardware.uinput.enable         = true;
 
-  # List packages installed in system profile. To search, run:
-  # $ nix search wget
+  # ── Users ────────────────────────────────────────────────────────────────────
+  users.users.dustin = {
+    isNormalUser = true;
+    description  = "Dustin Shinn";
+    extraGroups  = [ "networkmanager" "wheel" "video" "uinput" ];
+    shell        = pkgs.zsh;
+  };
+
+  # ── Packages ─────────────────────────────────────────────────────────────────
+  nixpkgs.config.allowUnfree = true;
   environment.systemPackages = with pkgs; [
     brave
     gnome-tweaks
     fastfetch
     git
+    gnome-randr
     htop
     mangohud
     obsidian
     pfetch
     prismlauncher
     spotify
-    temurin-bin-17 #java17
+    temurin-bin-17
     vscode
   ];
 
-  services.udev.packages = [ pkgs.via ];
+  # ── Shell Aliases ────────────────────────────────────────────────────────────
+  environment.shellAliases = {
+    sun-on    = "systemctl --user start sunshine";
+    sun-off   = "systemctl --user stop sunshine";
+    sun-check = "systemctl --user status sunshine";
+    sun-log   = "journalctl --user -u sunshine -f";
+    sun-web   = "firefox https://localhost:47990";
+    sun-game  = "tail -f /run/user/1000/sunshine.log";
+  };
 
-  programs.firefox.enable = true;
-  programs.gamemode.enable = true;
+  # ── Programs ─────────────────────────────────────────────────────────────────
+  programs.firefox.enable   = true;
+  programs.gamemode.enable  = true;
+  programs.gamescope.enable = true;
+
+  programs.appimage = {
+    enable = true;
+    binfmt = true;
+  };
+
 
   programs.neovim = {
-    enable = true;
+    enable        = true;
     defaultEditor = true;
-    viAlias = true;
-    vimAlias = true;
+    viAlias       = true;
+    vimAlias      = true;
   };
 
   programs.steam = {
-    enable = true;
-    remotePlay.openFirewall = true; 
-    dedicatedServer.openFirewall = true; 
-    localNetworkGameTransfers.openFirewall = true; 
+    enable                                = true;
+    remotePlay.openFirewall               = true;
+    dedicatedServer.openFirewall          = true;
+    localNetworkGameTransfers.openFirewall = true;
   };
 
   programs.zsh = {
-    enable = true;
-    enableCompletion = true;
-    autosuggestions.enable = true;
+    enable                    = true;
+    enableCompletion          = true;
+    autosuggestions.enable    = true;
     syntaxHighlighting.enable = true;
   };
 
+  # ── Services ──────────────────────────────────────────────────────────────────
+  services.udev.packages = [ pkgs.via ];
 
+  services.sunshine = {
+    enable       = true;
+    autoStart    = true;
+    capSysAdmin  = true;
+    openFirewall = true;
+    applications = {
+      env.PATH = "$(PATH):$(HOME)/.local/bin:/run/current-system/sw/bin";
+      apps = [
+        {
+          name        = "Steam Deck";
+          auto-detach = "false";
+          exclusive   = "true";
+          prep-cmd = [
+            {
+              do   = "${setRes}";
+              undo = "${restoreRes}";
+            }
+          ];
+          cmd = "${startSteam}";
+        }
+      ];
+    };
+  };
 
-
-  # Some programs need SUID wrappers, can be configured further or are
-  # started in user sessions.
-  # programs.mtr.enable = true;
-  # programs.gnupg.agent = {
-  #   enable = true;
-  #   enableSSHSupport = true;
-  # };
-
-  # List services that you want to enable:
-
-  # Enable the OpenSSH daemon.
-  # services.openssh.enable = true;
-
-  # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
-  # networking.firewall.allowedUDPPorts = [ ... ];
-  # Or disable the firewall altogether.
-  # networking.firewall.enable = false;
-
-  # This value determines the NixOS release from which the default
-  # settings for stateful data, like file locations and database versions
-  # on your system were taken. It‘s perfectly fine and recommended to leave
-  # this value at the release version of the first install of this system.
-  # Before changing this value read the documentation for this option
-  # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
-  system.stateVersion = "25.11"; # Did you read the comment?
-
+  # ── State Version ─────────────────────────────────────────────────────────────
+  system.stateVersion = "25.11";
 }
