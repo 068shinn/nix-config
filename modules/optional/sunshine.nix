@@ -65,6 +65,10 @@ let
   '';
 in
 {
+  environment.systemPackages = with pkgs; [
+    gnome-randr
+  ];
+
   services.sunshine = {
     enable = true;
     autoStart = true;

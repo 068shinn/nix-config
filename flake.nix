@@ -1,5 +1,5 @@
 {
-  description = "NixOS Config";
+  description = "Multi-host NixOS config";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
@@ -12,6 +12,14 @@
         specialArgs = { inherit inputs; };
         modules = [
           ./hosts/alakazam
+        ];
+      };
+
+      daughter-pc = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = { inherit inputs; };
+        modules = [
+          ./hosts/daughter-pc
         ];
       };
     };

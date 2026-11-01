@@ -2,9 +2,13 @@
 {
   imports = [
     ./hardware-configuration.nix
-    ./sunshine.nix
-    ../../modules/core.nix
-    ../../modules/desktop.nix
+    # ../../modules/optional/sunshine.nix
+    ../../modules/common/core.nix
+    ../../modules/common/networking.nix
+    ../../modules/common/packages.nix
+    ../../modules/common/shell.nix
+    ../../modules/common/users.nix
+    ../../modules/desktops/gnome.nix
     ../../modules/gaming.nix
     ../../modules/programs.nix
   ];

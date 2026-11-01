@@ -1,5 +1,10 @@
 { config, pkgs, ... }:
 {
+  environment.systemPackages = with pkgs; [
+    mangohud
+    prismlauncher
+  ];
+
   programs.gamemode.enable = true;
   programs.gamescope.enable = true;
 
