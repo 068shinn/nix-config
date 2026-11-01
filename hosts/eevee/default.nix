@@ -42,5 +42,5 @@
     kernelParams = [ "nvidia.NVreg_PreserveVideoMemoryAllocations=1" ];
   };
 
-  system.stateVersion = "25.11";
+  system.stateVersion = "26.05";
 }
