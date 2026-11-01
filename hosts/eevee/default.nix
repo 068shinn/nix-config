@@ -1,9 +1,7 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 {
-  # Template for a second machine with the same shared config.
   imports = [
     ./hardware-configuration.nix
-    # ../../modules/optional/sunshine.nix
     ../../modules/common/core.nix
     ../../modules/common/networking.nix
     ../../modules/common/packages.nix
@@ -15,6 +13,10 @@
   ];
 
   networking.hostName = "eevee";
+
+  boot.loader.systemd-boot.enable = lib.mkForce false;
+  boot.loader.grub.enable = true;
+  boot.loader.grub.device = "/dev/nvme0n1";
 
   users.users.ava = {
     isNormalUser = true;
@@ -31,15 +33,9 @@
     modesetting.enable = true;
     powerManagement.enable = false;
     powerManagement.finegrained = false;
-    open = false;
+    open = false; # GTX 980 Ti (Maxwell) does not support open kernel modules
     nvidiaSettings = true;
-    package = config.boot.kernelPackages.nvidiaPackages.stable;
-  };
-
-  boot = {
-    kernelModules = [ "nvidia" "nvidia_modeset" "nvidia_uvm" "nvidia_drm" ];
-    blacklistedKernelModules = [ "nouveau" ];
-    kernelParams = [ "nvidia.NVreg_PreserveVideoMemoryAllocations=1" ];
+    package = config.boot.kernelPackages.nvidiaPackages.legacy_580;
   };
 
   system.stateVersion = "26.05";

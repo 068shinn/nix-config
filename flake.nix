@@ -15,11 +15,11 @@
         ];
       };
 
-      daughter-pc = nixpkgs.lib.nixosSystem {
+      eevee = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = { inherit inputs; };
         modules = [
-          ./hosts/daughter-pc
+          ./hosts/eevee
         ];
       };
     };
