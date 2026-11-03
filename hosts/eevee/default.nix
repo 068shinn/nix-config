@@ -14,6 +14,7 @@
 
   networking.hostName = "eevee";
 
+  boot.kernelPackages = lib.mkForce pkgs.linuxPackages;
   boot.loader.systemd-boot.enable = lib.mkForce false;
   boot.loader.grub.enable = true;
   boot.loader.grub.device = "/dev/nvme0n1";
