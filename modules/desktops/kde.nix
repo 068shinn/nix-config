@@ -17,6 +17,12 @@
     drivers = [ pkgs.hplipWithPlugin ];
   };
 
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+    openFirewall = true;
+  };
+
   services.pipewire = {
     enable = true;
     alsa.enable = true;
