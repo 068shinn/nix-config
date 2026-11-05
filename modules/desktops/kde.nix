@@ -11,6 +11,12 @@
   services.pulseaudio.enable = false;
   security.rtkit.enable = true;
 
+
+  services.printing = {
+    enable = true;
+    drivers = [ pkgs.hplipWithPlugin ];
+  };
+
   services.pipewire = {
     enable = true;
     alsa.enable = true;
